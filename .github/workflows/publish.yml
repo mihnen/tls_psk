@@ -14,6 +14,11 @@ on:
       # v1.2.3-rc1 or v1.2.3+build. Rejects junk like "v1.2.3xyz" or "vlatest".
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+[-+]*"
+  # Manual trigger from the Actions UI. Publishes the version currently in
+  # pubspec.yaml on the selected ref (pub.dev still rejects a duplicate or a
+  # version that doesn't match pubspec). Requires the matching pub.dev setting:
+  # "Enable publishing from workflow_dispatch events".
+  workflow_dispatch:
 
 jobs:
   publish:
