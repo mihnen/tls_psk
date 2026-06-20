@@ -1,0 +1,35 @@
+name: publish
+
+# Publishes tls_psk to pub.dev when a version tag (vX.Y.Z) is pushed, using
+# pub.dev's GitHub Actions OIDC integration — no secrets/tokens stored.
+#
+# One-time setup on pub.dev (after the first manual publish claims the name):
+#   pub.dev -> tls_psk -> Admin -> Automated publishing -> Enable publishing
+#   from GitHub Actions, repository "mihnen/tls_psk", tag pattern "v{{version}}".
+on:
+  push:
+    tags:
+      # Semver tags only. First pattern: vMAJOR.MINOR.PATCH. Second: the same with
+      # a semver pre-release / build suffix (introduced by '-' or '+'), e.g.
+      # v1.2.3-rc1 or v1.2.3+build. Rejects junk like "v1.2.3xyz" or "vlatest".
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+[-+]*"
+
+jobs:
+  publish:
+    permissions:
+      id-token: write # REQUIRED for pub.dev OIDC authentication
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # vendored mbedTLS must be in the published tarball
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      # Verify the package is clean before publishing.
+      - run: dart pub publish --dry-run
+      # OIDC auth is automatic here (id-token: write + pub.dev automated publishing).
+      - run: flutter pub publish --force
