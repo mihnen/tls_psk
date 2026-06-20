@@ -1,0 +1,21 @@
+# Trim the published tarball: exclude everything in the vendored mbedTLS tree
+# that the build does not use (tests, programs, docs). The build runs with
+# ENABLE_TESTING=OFF / ENABLE_PROGRAMS=OFF, so these are never compiled.
+third_party/mbedtls/tests/
+third_party/mbedtls/programs/
+third_party/mbedtls/docs/
+third_party/mbedtls/doxygen/
+third_party/mbedtls/visualc/
+third_party/mbedtls/tf-psa-crypto/tests/
+third_party/mbedtls/tf-psa-crypto/docs/
+third_party/mbedtls/tf-psa-crypto/programs/
+
+# Test key/cert fixtures shipped in the framework submodule — not used by the
+# build, and pub.dev's secret scanner (correctly) rejects bundled private keys.
+third_party/mbedtls/framework/data_files/
+third_party/mbedtls/tf-psa-crypto/framework/data_files/
+
+# Local build output and CI config — not needed by consumers.
+build-host/
+build/
+.github/

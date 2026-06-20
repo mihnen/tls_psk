@@ -1,0 +1,43 @@
+name: mbedtls-watch
+
+# Opens an issue when a newer mbedTLS release is published upstream, so tracking
+# security updates is "merge a PR", not "remember to check". Bump the
+# third_party/mbedtls submodule and tool/pinned_mbedtls.txt to resolve.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare pinned mbedTLS against the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PINNED="$(cat tool/pinned_mbedtls.txt)"
+          LATEST="$(gh api repos/Mbed-TLS/mbedtls/releases/latest --jq .tag_name)"
+          echo "pinned=$PINNED latest=$LATEST"
+          if [ "$PINNED" = "$LATEST" ]; then
+            echo "Up to date."
+            exit 0
+          fi
+          TITLE="mbedTLS update available: $LATEST (pinned $PINNED)"
+          # Don't pile up duplicate issues.
+          if gh issue list --state open --search "in:title $TITLE" | grep -q "$LATEST"; then
+            echo "Issue already open."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body \
+            "A newer mbedTLS release (**$LATEST**) is available; this package is pinned to **$PINNED**.
+
+          To update:
+          1. \`cd third_party/mbedtls && git fetch --tags && git checkout $LATEST && git submodule update --init --recursive\`
+          2. Update \`tool/pinned_mbedtls.txt\` to \`$LATEST\`.
+          3. Rebuild + run tests, bump the package version, and republish."
