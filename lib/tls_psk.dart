@@ -87,7 +87,7 @@ class TlsPskSocket {
     }
     if (ctx == nullptr) {
       socket.destroy();
-      throw TlsPskException('failed to create TLS-PSK engine');
+      throw TlsPskException('failed to create TLS-PSK engine: ${_initError()}');
     }
 
     final s = TlsPskSocket._(socket, ctx);
@@ -266,6 +266,17 @@ class TlsPskSocket {
     final buf = malloc<Uint8>(160);
     try {
       b.tlspskStrerror(_ctx, buf.cast<Utf8>(), 160);
+      return buf.cast<Utf8>().toDartString();
+    } finally {
+      malloc.free(buf);
+    }
+  }
+
+  // Why tlspsk_client_new returned null (engine setup failure).
+  static String _initError() {
+    final buf = malloc<Uint8>(160);
+    try {
+      b.tlspskStrerror(nullptr, buf.cast<Utf8>(), 160);
       return buf.cast<Utf8>().toDartString();
     } finally {
       malloc.free(buf);

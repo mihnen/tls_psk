@@ -38,13 +38,19 @@ struct tlspsk_ctx {
 /* PSA must be initialised once per process before any TLS 1.3 work. */
 static int s_psa_ready = 0;
 
+/* Why the last tlspsk_client_new() failed (it can only return NULL). Retrieved
+ * via tlspsk_strerror(NULL, ...) so the Dart side can report a real reason. */
+static char g_init_err[96] = "";
+
+/* Returns 0 on success, else the (negative) psa_status_t. */
 static int ensure_psa(void)
 {
     if (s_psa_ready) {
         return 0;
     }
-    if (psa_crypto_init() != PSA_SUCCESS) {
-        return -1;
+    psa_status_t st = psa_crypto_init();
+    if (st != PSA_SUCCESS) {
+        return (int) st;
     }
     s_psa_ready = 1;
     return 0;
@@ -99,12 +105,19 @@ tlspsk_ctx *tlspsk_client_new(const uint8_t *psk, size_t psk_len,
                               const uint8_t *identity, size_t identity_len,
                               const char *server_name)
 {
-    if (psk == NULL || psk_len == 0 || ensure_psa() != 0) {
+    if (psk == NULL || psk_len == 0) {
+        snprintf(g_init_err, sizeof g_init_err, "psk is empty");
+        return NULL;
+    }
+    int pst = ensure_psa();
+    if (pst != 0) {
+        snprintf(g_init_err, sizeof g_init_err, "psa_crypto_init failed: %d", pst);
         return NULL;
     }
 
     tlspsk_ctx *c = calloc(1, sizeof *c);
     if (c == NULL) {
+        snprintf(g_init_err, sizeof g_init_err, "out of memory");
         return NULL;
     }
 
@@ -115,6 +128,8 @@ tlspsk_ctx *tlspsk_client_new(const uint8_t *psk, size_t psk_len,
                                          MBEDTLS_SSL_TRANSPORT_STREAM,
                                          MBEDTLS_SSL_PRESET_DEFAULT);
     if (rc != 0) {
+        snprintf(g_init_err, sizeof g_init_err, "ssl_config_defaults failed: -0x%04x",
+                 (unsigned) -rc);
         goto fail;
     }
 
@@ -132,11 +147,15 @@ tlspsk_ctx *tlspsk_client_new(const uint8_t *psk, size_t psk_len,
     rc = mbedtls_ssl_conf_psk(&c->conf, psk, psk_len,
                               identity ? identity : &empty, identity_len);
     if (rc != 0) {
+        snprintf(g_init_err, sizeof g_init_err, "ssl_conf_psk failed: -0x%04x",
+                 (unsigned) -rc);
         goto fail;
     }
 
     rc = mbedtls_ssl_setup(&c->ssl, &c->conf);
     if (rc != 0) {
+        snprintf(g_init_err, sizeof g_init_err, "ssl_setup failed: -0x%04x",
+                 (unsigned) -rc);
         goto fail;
     }
 
@@ -144,6 +163,8 @@ tlspsk_ctx *tlspsk_client_new(const uint8_t *psk, size_t psk_len,
     if (server_name != NULL) {
         rc = mbedtls_ssl_set_hostname(&c->ssl, server_name);
         if (rc != 0) {
+            snprintf(g_init_err, sizeof g_init_err, "ssl_set_hostname failed: -0x%04x",
+                     (unsigned) -rc);
             goto fail;
         }
     }
@@ -283,8 +304,13 @@ int tlspsk_strerror(tlspsk_ctx *c, char *buf, size_t cap)
     if (buf == NULL || cap == 0) {
         return 0;
     }
-    int err = c ? c->last_err : 0;
-    mbedtls_strerror(err, buf, cap);
+    /* No engine: report why tlspsk_client_new() failed (it returns NULL). */
+    if (c == NULL) {
+        snprintf(buf, cap, "%s", g_init_err[0] ? g_init_err : "unknown error");
+        buf[cap - 1] = '\0';
+        return (int) strlen(buf);
+    }
+    mbedtls_strerror(c->last_err, buf, cap);
     buf[cap - 1] = '\0';
     return (int) strlen(buf);
 }
